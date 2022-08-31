@@ -1,0 +1,48 @@
+OVERALL STRUCTURE
+ - basically the entirety of the code happens in the nmi routine, all time outside is spent in a neverending loop
+ - reset seems to be fairly routine though there is a lot of redundant initialization to 0
+ 
+INPUT POLLING
+ - Polls 4 times simultaneously to mitigate DMC bug. Updates newly pressed/held buttons for current frame, as well as the held buttons from the previous frame
+ - Afterwards is this weird way of implementing DAS for the pause menu by copying the dpad to another variable but annihilating most inputs to prevent actual shifting. Initial startup is around 27 frames and repeat is 4
+ 
+PAUSE MENU
+ - nothing particularly fancy here
+ 
+AUDIO
+ - more or less boilerplate, decoding the opcodes is a good task though
+ - the variables are basically all in sram since normal ram is being used by rendering
+ - a lot of tables are spaced out so some of the labels are super annoying because mesen won't let you mark things with space in the middle
+ - every channel is updated once per frame. i think the functionality exists to set length counters but this is never implemented
+ - some audio envelopes are apparently spread out over two different tables even though any particular one is not that long lol
+ 
+VIDEO
+ - the really interesting part, since 30fps is quite impressive
+ - During init a 5-page payload is setup in ram from like $01F6-$06F6. It writes 256 tiles to vram from scanlines 241-255, which is more than comfortable
+ - Thus it takes four frames to render the unfocused nametable, but this means that the focused nametable is somehow updated without ever being written to.
+ - This is done using a palette swap. Since there are 16 possible B/W tiles, there are 256 possible transitions so this can always be done perfectly. 
+ - The video data is divided between PRG and CHR banks. CHR banks are a stream of what tiles get updated (i.e. 32*30/8=120 bytes are needed to dictate an entire nametable). Each updated tile is stored in order in PRG. PRG also has some other commands to initialize an entire nametable or idle for some number of frames.
+ 
+ 
+AUDIO OPCODE TABLE
+ - [$EE] $XX $YY $ZZ: loads the 8kb bank $XX000-$(XX+2)000 and updates the pointer to $YYZZ
+ - [UNSURE] [$FC] $XX: silence channel for $XX frames
+ - [UNSURE] [$FD] $XX: something with setting the volume too????? bit 7 indicates constant volume, at which point the low nybble is the actual volume. otherwise this is the pointer to the envelope?????? result is stored in bit 0 of channel status flags
+ - [UNSURE] [$FE] $XX: updates volume for successive notes. bit 7 set indicates constant volume, and if so the 4000/4004/4008/400C register is set immediately (this is kind of weird though). otherwise $XX presumably contains the index into a table of envelopes. result is stored in bit 3 of channel status flags
+ - [$F4] $XX: sets duration to $XX. presumably for repeated/extended notes since there's an rts right after
+ - The following appear to be unused
+ - [UNSURE] [$A0] $WW $XX $YY $ZZ: Checks $WW against some unknown value. If not equal then perform the equivalent of [$EE] $XX $YY $ZZ. If equal then we just ignore the last 3 bytes??
+ - [UNSURE] [$A1] $WW $XX $YY $ZZ: Same as $A0 except branches are switched
+ - [UNSURE] [$F0] $XX: Set length counter halt/constant volume for subsequent notes (the values here are the inverse of the values actually written to $400x which allows both to be true by default)
+ - [UNSURE] [$E9]: set bit 0 of one of the unknown flags
+ - [UNSURE] [$E8] $XX: set bit 1 of the same unknown flag byte if $XX != 0, otherwise clear it (skips updating length counter/pitch hi, for really no reason?)
+ - [$F9] $XX: set sweep to $XX
+ 
+WEIRD THINGS
+ - Das as explained above
+ - ``checkIfBOrAPressed`` since both require resetting the rom more or less
+ - Why is the TXS needed?
+ 
+THINGS I'VE LEARNED
+ - Obfuscation could get way way worse and I got lucky here sheesh
+ - Actually look at the data files to see what kind of codes are used more often
