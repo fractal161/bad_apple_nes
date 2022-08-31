@@ -1,0 +1,3 @@
+[submodule "nes-util"]
+	path = nes-util
+	url = https://github.com/qalle2/nes-util
