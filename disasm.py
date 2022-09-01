@@ -16,7 +16,9 @@ if __name__ == '__main__':
         f.write(code_bin)
     code = subprocess.check_output([
         'da65',
-        'bad_apple.bin'
+        'bad_apple.bin',
+        '-i',
+        'bad_apple.info'
         ])
     with open('src/bad_apple.s', 'wb') as f:
         f.write(code)
