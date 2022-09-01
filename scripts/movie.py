@@ -15,35 +15,53 @@ Two colors are given: the default color and the "shadow" color, which only appea
 Thus, if a nametable tile is given by $XY, the shadow colors are determined by the on bits in X & !(X ^ Y), and the base color for the second frame is just X & Y.
 '''
 class MovieDoubleFrame():
-    def __init__(self, nametable, base_color=0x0F, shadow=0x0F):
+    def __init__(self, nametable, base_color=0x0F, light_color=0x30, shadow=0x30):
         self.nametable = nametable
         # in RGB format because it makes sense, will convert to bgr later
         self.base_color = self._rgb_to_bgr(nes.PALETTE[base_color])
+        self.light_color = self._rgb_to_bgr(nes.PALETTE[light_color])
         self.shadow = self._rgb_to_bgr(nes.PALETTE[shadow])
+        self.frame_resolver = [self._frame0, self._frame1]
     
     def patch_frame(self):
         pass
+
     def _rgb_to_bgr(self, color):
         return (color[2], color[1], color[0])
+
     def _extract_frame(self, num):
         frame = np.full((60, 64, 3), (255,255,255), np.uint8)
         for i in range(30):
             for j in range(32):
+                tile = self.nametable[i][j]
                 offsets = ((0,0), (1,0), (0,1), (1,1))
-                nybble = self.nametable[i][j] >> 4
                 for k in range(4):
                     y = 2*i + offsets[k][1]
                     x = 2*j + offsets[k][0]
-                    if (nybble >> k) & 1 > 0:
-                        frame[y,x] = self.base_color
+                    frame[y,x] = self.frame_resolver[num](tile, k)
         return frame
-    def _extract_frame2(self):
-        pass
+
+    # 
+    def _frame0(self, tile, quadrant):
+        if (tile >> (4 + quadrant)) & 1 > 0:
+            return self.base_color
+        else:
+            return self.light_color
+    def _frame1(self, tile, quadrant):
+        bit0 = (tile >> (4 + quadrant)) & 1
+        bit1 = (tile >> quadrant) & 1
+        if bit1:
+            return self.base_color
+        elif bit0:
+            return self.shadow
+        else:
+            return self.light_color
 
     def export(self):
         # First frame, so use high byte only
+        big_frame0 = cv2.resize(self._extract_frame(0), (512,480), interpolation=cv2.INTER_NEAREST)
         big_frame1 = cv2.resize(self._extract_frame(1), (512,480), interpolation=cv2.INTER_NEAREST)
-        return big_frame1, big_frame1
+        return big_frame0, big_frame1
 
 class Movie():
     def __init__(self, *args, **kwargs):
@@ -114,8 +132,10 @@ if __name__ == '__main__':
         [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEA, 0xFF, 0xFF, 0xFF, 0xFF, 
 			0xFF, 0xFF, 0xAA, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]
     ]
-    test_frame = MovieDoubleFrame(test_nametable)
+    test_frame = MovieDoubleFrame(test_nametable, 0x0F, 0x30, 0x2C)
     frame1, frame2 = test_frame.export()
     cv2.imshow("frame", frame1)
+    cv2.waitKey(0)
+    cv2.imshow("frame", frame2)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
