@@ -22,7 +22,13 @@ class MovieDoubleFrame():
         self.light_color = self._rgb_to_bgr(nes.PALETTE[light_color])
         self.shadow = self._rgb_to_bgr(nes.PALETTE[shadow])
         self.frame_resolver = [self._frame0, self._frame1]
+        self.colors = (base_color, light_color, shadow)
     
+    def copy(self):
+        nametable = [row[:] for row in self.nametable]
+        return MovieDoubleFrame(nametable, self.colors[0], self.colors[1], self.colors[2])
+
+    # returns new frame object
     def patch_frame(self):
         pass
 
@@ -41,7 +47,7 @@ class MovieDoubleFrame():
                     frame[y,x] = self.frame_resolver[num](tile, k)
         return frame
 
-    # 
+    # figures out what colors to show 
     def _frame0(self, tile, quadrant):
         if (tile >> (4 + quadrant)) & 1 > 0:
             return self.base_color

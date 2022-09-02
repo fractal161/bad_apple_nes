@@ -68,10 +68,42 @@ PALETTE = {
 }
 
 class Rom():
-    def __init__(self, path, *args, **kwargs):
-        pass
-    def get_prg_byte(self):
-        pass
-    def get_chr_byte(self):
-        pass
+    def __init__(self, path):
+        with open(path, 'rb') as f:
+            rom = f.read()
+        self.header = self._get_header_from_bytes(rom[0:16])
+        start = 16
+        self.trainer = b''
+        if self.header['trainer']:
+            self.trainer = rom[16:528]
+            start += 0x200
+        self.prg = rom[start:start+self.header['prg_size']]
+        start += self.header['prg_size']
+        self.chr = rom[start:start+self.header['chr_size']]
+        start += self.header['chr_size']
+
+    # assumes ines1.0, doesn't look at flags 7-15 really
+    def _get_header_from_bytes(self, header_bytes):
+        byte_list = list(header_bytes)
+        header = {}
+        header['prg_size'] = 0x4000 * byte_list[4]
+        header['chr_size'] = 0x2000 * byte_list[5]
+        header['mapper'] = byte_list[7] & 0xF0 + (byte_list[6] >> 4)
+        header['mirroring'] = byte_list[6] & 1
+        header['battery'] = bool((byte_list[6] >> 1) & 1)
+        header['trainer'] = bool((byte_list[6] >> 2) & 1)
+        header['four_screen'] = bool((byte_list[6] >> 3) & 1)
+        return header
+
+    # assuming each bank is 8kb because mmc3
+    def get_prg_byte(self, bank, addr):
+        return self.prg[bank * 0x2000 + (addr % 0x2000)]
+
+    # assuming each bank is 1kb (works for our case)
+    def get_chr_byte(self, bank, addr):
+        return self.prg[bank * 0x400 + (addr % 0x400)]
+
+if __name__ == '__main__':
+    test_rom = Rom('./bad_apple_2_5.nes')
+
 
