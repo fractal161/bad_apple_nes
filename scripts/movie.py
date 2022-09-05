@@ -16,7 +16,7 @@ Thus, if a nametable tile is given by $XY, the shadow colors are determined by t
 '''
 class DoubleFrame():
     def __init__(self, nametable=None, base_color=0x0F, light_color=0x30, shadow=0x30):
-        self.nametable = nametable or np.full((30,32), 0xFF, dtype=np.int8).tolist()
+        self.nametable = nametable or np.full((30,32), 0x00, dtype=np.uint8)
         # in RGB format because it makes sense, will convert to bgr later
         self.base_color = self._rgb_to_bgr(nes.PALETTE[base_color])
         self.light_color = self._rgb_to_bgr(nes.PALETTE[light_color])
@@ -25,12 +25,12 @@ class DoubleFrame():
         self.colors = (base_color, light_color, shadow)
     
     def copy(self):
-        nametable = [row[:] for row in self.nametable]
+        nametable = self.nametable.copy()
         return DoubleFrame(nametable, self.colors[0], self.colors[1], self.colors[2])
 
-    # returns new frame object
-    def patch_frame(self):
-        pass
+    def patch(self, pos, byte):
+        y, x = pos
+        self.nametable[y,x] = byte
 
     def _rgb_to_bgr(self, color):
         return (color[2], color[1], color[0])

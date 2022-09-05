@@ -1,8 +1,15 @@
 import cv2
 import numpy as np
+from enum import Enum
 
-from nes import Rom
+from nes import Rom, RomPointer
 from movie import DoubleFrame
+
+class CommandMode(Enum):
+    RESET = 0
+    FREEZE = 1
+    REPLACE = 2
+    PATCH = 3
 
 class MovieParser():
     lagFrames = [2527]
@@ -10,28 +17,46 @@ class MovieParser():
     def __init__(self, path):
         self.rom = Rom(path)
         self.state = DoubleFrame()
-        self.prgBank = 0
-        self.prgPtr = 0x8000
-        self.chrBank = 0x10
-        self.chrPtr = 0x1800
-        self.mode = -1 # uninitialized
-        self.modeData = -1 # uninitialized
-        self.quadrant = -1 # uninitialized
-        self.frame = 0 # distinct from quadrant because we can track lag frames
+        self.resetVideo()
+        self.commands = [self.resetVideo, self.freezeFrame, self.copyEntireNametable, self.patchNametablePage]
 
     def runFrame(self):
-        self.frame += 1
-        if self.frame in self.lagFrames:
-            return self.frame
+        if self.frameCount == 4:
+            self.getVideoOpcode()
+            assert CommandMode(self.mode) == CommandMode.REPLACE, 'expected 2, got ' + str(self.mode)
+            for _ in range(4):
+                self.copyEntireNametable()
+                self.quadrant = (self.quadrant + 1) % 4
+            self.frameCount = 8
+            return self.frameCount
+        if self.frameCount in self.lagFrames:
+            self.frameCount += 1
+            return self.frameCount
+        if CommandMode(self.mode) == CommandMode.FREEZE:
+            if self.quadrant > 0:
+                self.frameCount += 1
+                self.quadrant = (self.quadrant + 1) % 4
+                return self.frameCount
+            else:
+                self.modeData -= 1
+                if self.modeData > 0:
+                    self.frameCount += 1
+                    self.quadrant = (self.quadrant + 1) % 4
+                    return self.frameCount
         if self.quadrant == 0:
-            opcode = self.rom.get_prg_byte(self.prgBank, self.prgPtr)
-            self.mode, self.modeData = self.getVideoOpcode(opcode)
-            # advance pointer
+            self.getVideoOpcode()
+        # run command if needed
+        self.commands[self.mode]()
+        self.quadrant = (self.quadrant + 1) % 4
+        self.frameCount += 1
+        return self.frameCount
 
-    def getVideoOpcode(self, opcode):
-        mode = (opcode & 0xC0) >> 6
-        data = opcode & 0x3F
-        return mode, data
+    def getVideoOpcode(self):
+        opcode = self.rom.get_prg_byte(*self.prgPtr.advance())
+        self.mode = (opcode & 0xC0) >> 6
+        self.modeData = opcode & 0x3F
+        print(f'Opcode: {opcode:02X} on frame #{self.frameCount}')
+        print(f'Mode: {CommandMode(self.mode).name}')
 
     # mode 3
     def patchNametablePage(self):
@@ -39,18 +64,29 @@ class MovieParser():
 
     # mode 2
     def copyEntireNametable(self):
-        pass
+        copy = 0x100
+        if self.quadrant == 3:
+            copy = 0xC0
+        for i in range(copy):
+            byte = self.rom.get_prg_byte(*self.prgPtr.advance())
+            index = self.quadrant * 0x100 + i
+            y = index // 32
+            x = index % 32
+            self.state.patch((y,x), byte)
 
     # mode 1
     def freezeFrame(self):
-        pass
+        return
 
     # mode 0
     def resetVideo(self):
-        pass
+        self.prgPtr = RomPointer(0, 0x8000, 0xA000)
+        self.chrPtr = RomPointer(0x10, 0x1800, 0x1A00)
+        self.mode = 0 # uninitialized
+        self.modeData = 0 # uninitialized
+        self.quadrant = 0 # uninitialized
+        self.frameCount = 4 # distinct from quadrant because we can track lag frames
 
-    def processVideoInstruction(self, ptr):
-        mode, data = getVideoOpcode(ptr)
 
 def getNthFrame(n, path):
     parser = MovieParser(path)
@@ -60,3 +96,6 @@ def getNthFrame(n, path):
 
 if __name__ == '__main__':
     bad_apple = MovieParser('./bad_apple_2_5.nes')
+    for _ in range(100):
+        bad_apple.runFrame()
+
