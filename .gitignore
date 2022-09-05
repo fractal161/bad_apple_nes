@@ -1,3 +1,5 @@
+# LSP
+.luarc.json
 # NES stuff
 *.nes
 *.bin

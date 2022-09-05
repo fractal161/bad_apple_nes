@@ -14,9 +14,9 @@ Two colors are given: the default color and the "shadow" color, which only appea
 
 Thus, if a nametable tile is given by $XY, the shadow colors are determined by the on bits in X & !(X ^ Y), and the base color for the second frame is just X & Y.
 '''
-class MovieDoubleFrame():
-    def __init__(self, nametable, base_color=0x0F, light_color=0x30, shadow=0x30):
-        self.nametable = nametable
+class DoubleFrame():
+    def __init__(self, nametable=None, base_color=0x0F, light_color=0x30, shadow=0x30):
+        self.nametable = nametable or np.full((30,32), 0xFF, dtype=np.int8).tolist()
         # in RGB format because it makes sense, will convert to bgr later
         self.base_color = self._rgb_to_bgr(nes.PALETTE[base_color])
         self.light_color = self._rgb_to_bgr(nes.PALETTE[light_color])
@@ -26,7 +26,7 @@ class MovieDoubleFrame():
     
     def copy(self):
         nametable = [row[:] for row in self.nametable]
-        return MovieDoubleFrame(nametable, self.colors[0], self.colors[1], self.colors[2])
+        return DoubleFrame(nametable, self.colors[0], self.colors[1], self.colors[2])
 
     # returns new frame object
     def patch_frame(self):
@@ -36,7 +36,7 @@ class MovieDoubleFrame():
         return (color[2], color[1], color[0])
 
     def _extract_frame(self, num):
-        frame = np.full((60, 64, 3), (255,255,255), np.uint8)
+        frame = np.full((60, 64, 3), self.light_color, np.uint8)
         for i in range(30):
             for j in range(32):
                 tile = self.nametable[i][j]
@@ -138,7 +138,7 @@ if __name__ == '__main__':
         [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEA, 0xFF, 0xFF, 0xFF, 0xFF, 
 			0xFF, 0xFF, 0xAA, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00]
     ]
-    test_frame = MovieDoubleFrame(test_nametable, 0x0F, 0x30, 0x2C)
+    test_frame = DoubleFrame(test_nametable, 0x0F, 0x30, 0x2C)
     frame1, frame2 = test_frame.export()
     cv2.imshow("frame", frame1)
     cv2.waitKey(0)

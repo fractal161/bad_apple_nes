@@ -23,7 +23,7 @@ VIDEO
  - This is done using a palette swap. Since there are 16 possible B/W tiles, there are 256 possible transitions so this can always be done perfectly. 
  - The video data is divided between PRG and CHR banks. CHR banks are a stream of what tiles get updated (i.e. 32*30/8=120 bytes are needed to dictate an entire nametable). Each updated tile is stored in order in PRG. PRG also has some other commands to initialize an entire nametable or idle for some number of frames.
   - At frame 194 (according to Mesen) the buffer gets *reaaaaally* close to self-imploding. It's a combination of lots of DMC drums and lots of tile changes.
- 
+  - Frame 2527 is a lag frame (i.e. it starts before frame 2526 finishes copying to its nametable). The main protection here is memory location 0x02, which is set to 1 while operations happen and is set to 0 at the end. Since this wasn't unset, the code knows to rti early, so the rest of the copying can be finished. this seems to be the only one, unsure of why it occurs.
  
 AUDIO OPCODE TABLE
  - [$EE] $XX $YY $ZZ: loads the 8kb bank $XX000-$(XX+2)000 and updates the pointer to $YYZZ
@@ -43,7 +43,15 @@ WEIRD THINGS
  - Das as explained above
  - ``checkIfBOrAPressed`` since both require resetting the rom more or less
  - Why is the TXS needed?
- 
+
+VIDEO INIT PROCESS
+ - Nmi starts off ofc. Bunch of generic setup stuff, but then we get to what I currently call "resetMemoryToMovieStart"
+ - More setup, like movie frame counter and setting up the payload. After this we're in the middle of frame 4.
+ - Then "fetchSomePpuData" and "probablyImportantVideoEntryPoint" are sequentially called 4 times, to properly initialize the reference nametable.
+ - At this point it's around frame 5.
+ - Then the first nametable is directly set to all $FF (taking advantage of no rendering), ending in the middle of frame 6.
+ - Then one more vsync wait, and we enter the main waiting loop (thus waiting for frame 8).
+
 THINGS I'VE LEARNED
  - Obfuscation could get way way worse and I got lucky here sheesh
  - Actually look at the data files to see what kind of codes are used more often
