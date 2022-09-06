@@ -17,6 +17,7 @@ class MovieParser():
     def __init__(self, path):
         self.rom = Rom(path)
         self.state = DoubleFrame()
+        self.last_state = self.state.copy()
         self.reset_video()
         self.frame_count = 4 # distinct from quadrant because we can track lag frames
         self.commands = [self.reset_video, self.freeze_frame, self.copy_entire_nametable, self.patchNametablePage]
@@ -29,6 +30,7 @@ class MovieParser():
                 self.copy_entire_nametable()
                 self.quadrant = (self.quadrant + 1) % 4
             self.frame_count = 8
+            self.last_state = self.state.copy()
             return self.frame_count, self.quadrant
         if self.frame_count in self.lag_frames:
             self.frame_count += 1
@@ -48,6 +50,8 @@ class MovieParser():
             self.get_video_opcode()
         # run command if needed
         self.commands[self.mode]()
+        if self.quadrant == 3:
+            self.last_state = self.state.copy()
         self.quadrant = (self.quadrant + 1) % 4
         self.frame_count += 1
         return self.frame_count, self.quadrant
@@ -118,8 +122,8 @@ class MovieParser():
 def get_nth_frame(n, parser):
     if n < 9:
         return np.full((480, 512, 3), (11,72,0), np.uint8)
-    frame = parser.state.copy()
-    quadrant = 0
+    frame = parser.last_state.copy()
+    quadrant = parser.quadrant
     frame_num = parser.frame_count
     # kind of horrible, should fix
     while frame_num < n - 2:
@@ -131,15 +135,14 @@ def get_nth_frame(n, parser):
         return frame0
     return frame1
 
+
 if __name__ == '__main__':
     bad_apple = MovieParser('./bad_apple_2_5.nes')
-    length = 13141
-    test_frame = 92
+    length = 13137
     codec = cv2.VideoWriter.fourcc(*'mp4v')
-    movie = cv2.VideoWriter('bad_apple_v1.mp4', codec, 60, (512,480))
-    for i in range(length):
+    movie = cv2.VideoWriter('bad_apple_v2.mp4', codec, 60, (512,480))
+    for i in range(1,length+1):
         frame = get_nth_frame(i, bad_apple)
         movie.write(frame)
         if i % 100 == 0:
             print(i, 'frames')
-
