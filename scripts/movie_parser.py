@@ -18,6 +18,7 @@ class MovieParser():
         self.rom = Rom(path)
         self.state = DoubleFrame()
         self.resetVideo()
+        self.frameCount = 4 # distinct from quadrant because we can track lag frames
         self.commands = [self.resetVideo, self.freezeFrame, self.copyEntireNametable, self.patchNametablePage]
 
     def runFrame(self):
@@ -55,12 +56,39 @@ class MovieParser():
         opcode = self.rom.get_prg_byte(*self.prgPtr.advance())
         self.mode = (opcode & 0xC0) >> 6
         self.modeData = opcode & 0x3F
-        print(f'Opcode: {opcode:02X} on frame #{self.frameCount}')
-        print(f'Mode: {CommandMode(self.mode).name}')
 
     # mode 3
     def patchNametablePage(self):
-        pass
+        assert self.modeData < 16, 'Probably parsing error'
+        # check if quadrant(?) has updates
+        updateQuad = self.modeData % 2
+        self.modeData //= 2
+        if updateQuad == 0:
+            return
+        # fillBuffer loop
+        sliceChanges = []
+        for _ in range(4):
+            byte = self.rom.get_prg_byte(*self.prgPtr.advance())
+            sliceChanges.append(byte)
+        # whileBufferHasOnBits
+        for i in range(8):
+            for j in range(4):
+                shouldPatchSlice = (sliceChanges[j] & 0x80) >> 7
+                sliceChanges[j] = (sliceChanges[j] << 1) & 0xFF
+                if shouldPatchSlice == 1:
+                    self._patchSlice(self.quadrant, i, j)
+
+    def _patchSlice(self, quad, y, x):
+        newY = 8*quad + y
+        newX = 8*x
+        tilesToPatch = self.rom.get_chr_byte(*self.chrPtr.advance())
+        # print(f'CHR Data: {tilesToPatch:02X}')
+        for i in range(8):
+            shouldPatchTile = (tilesToPatch >> (7-i)) & 1
+            if shouldPatchTile == 1:
+                newTile = self.rom.get_prg_byte(*self.prgPtr.advance())
+                self.state.patch((newY, newX), newTile)
+            newX += 1
 
     # mode 2
     def copyEntireNametable(self):
@@ -81,11 +109,10 @@ class MovieParser():
     # mode 0
     def resetVideo(self):
         self.prgPtr = RomPointer(0, 0x8000, 0xA000)
-        self.chrPtr = RomPointer(0x10, 0x1800, 0x1A00)
+        self.chrPtr = RomPointer(0x10, 0x1800, 0x1C00)
         self.mode = 0 # uninitialized
         self.modeData = 0 # uninitialized
         self.quadrant = 0 # uninitialized
-        self.frameCount = 4 # distinct from quadrant because we can track lag frames
 
 
 def getNthFrame(n, path):
@@ -96,6 +123,8 @@ def getNthFrame(n, path):
 
 if __name__ == '__main__':
     bad_apple = MovieParser('./bad_apple_2_5.nes')
-    for _ in range(100):
-        bad_apple.runFrame()
+    length = 13141
+    frame = 0
+    while frame <= 13141:
+        frame = bad_apple.runFrame()
 

@@ -101,7 +101,7 @@ class Rom():
 
     # assuming each bank is 1kb (works for our case)
     def get_chr_byte(self, bank, addr):
-        return self.prg[bank * 0x400 + (addr % 0x400)]
+        return self.chr[bank * 0x400 + (addr % 0x400)]
 
 class RomPointer():
     def __init__(self, startBank, startAddr, maxAddr):
