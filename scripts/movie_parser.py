@@ -29,28 +29,28 @@ class MovieParser():
                 self.copy_entire_nametable()
                 self.quadrant = (self.quadrant + 1) % 4
             self.frame_count = 8
-            return self.frame_count
+            return self.frame_count, self.quadrant
         if self.frame_count in self.lag_frames:
             self.frame_count += 1
-            return self.frame_count
+            return self.frame_count, self.quadrant
         if CommandMode(self.mode) == CommandMode.FREEZE:
             if self.quadrant > 0:
                 self.frame_count += 1
                 self.quadrant = (self.quadrant + 1) % 4
-                return self.frame_count
+                return self.frame_count, self.quadrant
             else:
                 self.mode_data -= 1
                 if self.mode_data > 0:
                     self.frame_count += 1
                     self.quadrant = (self.quadrant + 1) % 4
-                    return self.frame_count
+                    return self.frame_count, self.quadrant
         if self.quadrant == 0:
             self.get_video_opcode()
         # run command if needed
         self.commands[self.mode]()
         self.quadrant = (self.quadrant + 1) % 4
         self.frame_count += 1
-        return self.frame_count
+        return self.frame_count, self.quadrant
 
     def get_video_opcode(self):
         opcode = self.rom.get_prg_byte(*self.prg_ptr.advance())
@@ -118,16 +118,28 @@ class MovieParser():
         self.quadrant = 0 # uninitialized
 
 
-def get_nth_frame(n, path):
-    parser = MovieParser(path)
+def get_nth_frame(n, parser):
     if n < 8:
         return np.full((480, 512, 3), (0,255,0), np.uint8)
-    return np.full((480, 512, 3), (0,255,0), np.uint8)
+    frame = parser.state.copy()
+    quadrant = 0
+    frame_num = 8
+    # kind of horrible, should fix
+    while frame_num < n - 2:
+        frame_num, quadrant = parser.run_frame()
+        if quadrant == 0:
+            frame = parser.state.copy()
+    frame0, frame1 = frame.export()
+    if quadrant < 2:
+        return frame0
+    return frame1
 
 if __name__ == '__main__':
     bad_apple = MovieParser('./bad_apple_2_5.nes')
     length = 13141
-    frame = 0
-    while frame <= 13141:
-        frame = bad_apple.run_frame()
+    test_frame = 1000
+    frame = get_nth_frame(test_frame, bad_apple)
+    cv2.imshow(f'frame {test_frame}', frame)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
