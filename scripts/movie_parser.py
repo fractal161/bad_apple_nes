@@ -56,9 +56,6 @@ class MovieParser():
         opcode = self.rom.get_prg_byte(*self.prg_ptr.advance())
         self.mode = (opcode & 0xC0) >> 6
         self.mode_data = opcode & 0x3F
-        if self.mode < 3:
-            print(f'Opcode: {opcode:02X} on frame #{self.frame_count}')
-            print(f'Mode: {CommandMode(self.mode).name}')
 
     # mode 3
     def patchNametablePage(self):
@@ -119,11 +116,11 @@ class MovieParser():
 
 
 def get_nth_frame(n, parser):
-    if n < 8:
-        return np.full((480, 512, 3), (0,255,0), np.uint8)
+    if n < 9:
+        return np.full((480, 512, 3), (11,72,0), np.uint8)
     frame = parser.state.copy()
     quadrant = 0
-    frame_num = 8
+    frame_num = parser.frame_count
     # kind of horrible, should fix
     while frame_num < n - 2:
         frame_num, quadrant = parser.run_frame()
@@ -137,9 +134,12 @@ def get_nth_frame(n, parser):
 if __name__ == '__main__':
     bad_apple = MovieParser('./bad_apple_2_5.nes')
     length = 13141
-    test_frame = 1000
-    frame = get_nth_frame(test_frame, bad_apple)
-    cv2.imshow(f'frame {test_frame}', frame)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    test_frame = 92
+    codec = cv2.VideoWriter.fourcc(*'mp4v')
+    movie = cv2.VideoWriter('bad_apple_v1.mp4', codec, 60, (512,480))
+    for i in range(length):
+        frame = get_nth_frame(i, bad_apple)
+        movie.write(frame)
+        if i % 100 == 0:
+            print(i, 'frames')
 
