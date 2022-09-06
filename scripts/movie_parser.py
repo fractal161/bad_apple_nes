@@ -12,110 +12,113 @@ class CommandMode(Enum):
     PATCH = 3
 
 class MovieParser():
-    lagFrames = [2527]
+    lag_frames = [2527]
 
     def __init__(self, path):
         self.rom = Rom(path)
         self.state = DoubleFrame()
-        self.resetVideo()
-        self.frameCount = 4 # distinct from quadrant because we can track lag frames
-        self.commands = [self.resetVideo, self.freezeFrame, self.copyEntireNametable, self.patchNametablePage]
+        self.reset_video()
+        self.frame_count = 4 # distinct from quadrant because we can track lag frames
+        self.commands = [self.reset_video, self.freeze_frame, self.copy_entire_nametable, self.patchNametablePage]
 
-    def runFrame(self):
-        if self.frameCount == 4:
-            self.getVideoOpcode()
+    def run_frame(self):
+        if self.frame_count == 4:
+            self.get_video_opcode()
             assert CommandMode(self.mode) == CommandMode.REPLACE, 'expected 2, got ' + str(self.mode)
             for _ in range(4):
-                self.copyEntireNametable()
+                self.copy_entire_nametable()
                 self.quadrant = (self.quadrant + 1) % 4
-            self.frameCount = 8
-            return self.frameCount
-        if self.frameCount in self.lagFrames:
-            self.frameCount += 1
-            return self.frameCount
+            self.frame_count = 8
+            return self.frame_count
+        if self.frame_count in self.lag_frames:
+            self.frame_count += 1
+            return self.frame_count
         if CommandMode(self.mode) == CommandMode.FREEZE:
             if self.quadrant > 0:
-                self.frameCount += 1
+                self.frame_count += 1
                 self.quadrant = (self.quadrant + 1) % 4
-                return self.frameCount
+                return self.frame_count
             else:
-                self.modeData -= 1
-                if self.modeData > 0:
-                    self.frameCount += 1
+                self.mode_data -= 1
+                if self.mode_data > 0:
+                    self.frame_count += 1
                     self.quadrant = (self.quadrant + 1) % 4
-                    return self.frameCount
+                    return self.frame_count
         if self.quadrant == 0:
-            self.getVideoOpcode()
+            self.get_video_opcode()
         # run command if needed
         self.commands[self.mode]()
         self.quadrant = (self.quadrant + 1) % 4
-        self.frameCount += 1
-        return self.frameCount
+        self.frame_count += 1
+        return self.frame_count
 
-    def getVideoOpcode(self):
-        opcode = self.rom.get_prg_byte(*self.prgPtr.advance())
+    def get_video_opcode(self):
+        opcode = self.rom.get_prg_byte(*self.prg_ptr.advance())
         self.mode = (opcode & 0xC0) >> 6
-        self.modeData = opcode & 0x3F
+        self.mode_data = opcode & 0x3F
+        if self.mode < 3:
+            print(f'Opcode: {opcode:02X} on frame #{self.frame_count}')
+            print(f'Mode: {CommandMode(self.mode).name}')
 
     # mode 3
     def patchNametablePage(self):
-        assert self.modeData < 16, 'Probably parsing error'
+        assert self.mode_data < 16, 'Probably parsing error'
         # check if quadrant(?) has updates
-        updateQuad = self.modeData % 2
-        self.modeData //= 2
-        if updateQuad == 0:
+        update_quad = self.mode_data % 2
+        self.mode_data //= 2
+        if update_quad == 0:
             return
         # fillBuffer loop
-        sliceChanges = []
+        slice_changes = []
         for _ in range(4):
-            byte = self.rom.get_prg_byte(*self.prgPtr.advance())
-            sliceChanges.append(byte)
+            byte = self.rom.get_prg_byte(*self.prg_ptr.advance())
+            slice_changes.append(byte)
         # whileBufferHasOnBits
         for i in range(8):
             for j in range(4):
-                shouldPatchSlice = (sliceChanges[j] & 0x80) >> 7
-                sliceChanges[j] = (sliceChanges[j] << 1) & 0xFF
-                if shouldPatchSlice == 1:
-                    self._patchSlice(self.quadrant, i, j)
+                should_patch_slice = (slice_changes[j] & 0x80) >> 7
+                slice_changes[j] = (slice_changes[j] << 1) & 0xFF
+                if should_patch_slice == 1:
+                    self._patch_slice(self.quadrant, i, j)
 
-    def _patchSlice(self, quad, y, x):
-        newY = 8*quad + y
-        newX = 8*x
-        tilesToPatch = self.rom.get_chr_byte(*self.chrPtr.advance())
-        # print(f'CHR Data: {tilesToPatch:02X}')
+    def _patch_slice(self, quad, y, x):
+        new_y = 8*quad + y
+        new_x = 8*x
+        tiles_to_patch = self.rom.get_chr_byte(*self.chr_ptr.advance())
+        # print(f'CHR Data: {tiles_to_patch:02X}')
         for i in range(8):
-            shouldPatchTile = (tilesToPatch >> (7-i)) & 1
-            if shouldPatchTile == 1:
-                newTile = self.rom.get_prg_byte(*self.prgPtr.advance())
-                self.state.patch((newY, newX), newTile)
-            newX += 1
+            should_patch_tile = (tiles_to_patch >> (7-i)) & 1
+            if should_patch_tile == 1:
+                newTile = self.rom.get_prg_byte(*self.prg_ptr.advance())
+                self.state.patch((new_y, new_x), newTile)
+            new_x += 1
 
     # mode 2
-    def copyEntireNametable(self):
+    def copy_entire_nametable(self):
         copy = 0x100
         if self.quadrant == 3:
             copy = 0xC0
         for i in range(copy):
-            byte = self.rom.get_prg_byte(*self.prgPtr.advance())
+            byte = self.rom.get_prg_byte(*self.prg_ptr.advance())
             index = self.quadrant * 0x100 + i
             y = index // 32
             x = index % 32
             self.state.patch((y,x), byte)
 
     # mode 1
-    def freezeFrame(self):
+    def freeze_frame(self):
         return
 
     # mode 0
-    def resetVideo(self):
-        self.prgPtr = RomPointer(0, 0x8000, 0xA000)
-        self.chrPtr = RomPointer(0x10, 0x1800, 0x1C00)
+    def reset_video(self):
+        self.prg_ptr = RomPointer(0, 0x8000, 0xA000)
+        self.chr_ptr = RomPointer(0x10, 0x1800, 0x1C00)
         self.mode = 0 # uninitialized
-        self.modeData = 0 # uninitialized
+        self.mode_data = 0 # uninitialized
         self.quadrant = 0 # uninitialized
 
 
-def getNthFrame(n, path):
+def get_nth_frame(n, path):
     parser = MovieParser(path)
     if n < 8:
         return np.full((480, 512, 3), (0,255,0), np.uint8)
@@ -126,5 +129,5 @@ if __name__ == '__main__':
     length = 13141
     frame = 0
     while frame <= 13141:
-        frame = bad_apple.runFrame()
+        frame = bad_apple.run_frame()
 

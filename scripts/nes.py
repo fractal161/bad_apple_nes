@@ -104,26 +104,26 @@ class Rom():
         return self.chr[bank * 0x400 + (addr % 0x400)]
 
 class RomPointer():
-    def __init__(self, startBank, startAddr, maxAddr):
-        self.bank = startBank
-        self.startBank = startBank
-        self.addr = startAddr
-        self.startAddr = startAddr
-        self.maxAddr = maxAddr
+    def __init__(self, start_bank, start_addr, max_addr):
+        self.bank = start_bank
+        self.start_bank = start_bank
+        self.addr = start_addr
+        self.start_addr = start_addr
+        self.max_addr = max_addr
     def get(self):
         return self.bank, self.addr
     def advance(self):
         bank = self.bank
         addr = self.addr
         self.addr += 1
-        if self.addr == self.maxAddr:
-            self.addr = self.startAddr
+        if self.addr == self.max_addr:
+            self.addr = self.start_addr
             self.bank += 1
         return bank, addr
 
     def reset(self):
-        self.bank = self.startBank
-        self.addr = self.startAddr
+        self.bank = self.start_bank
+        self.addr = self.start_addr
 
 if __name__ == '__main__':
     test_rom = Rom('./bad_apple_2_5.nes')
